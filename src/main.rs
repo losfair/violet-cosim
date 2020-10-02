@@ -8,17 +8,24 @@ use std::str::FromStr;
 
 fn main() {
     let mut executor = executor::Executor::new("firmware.bin");
+    let mut bubble_count: u64 = 0;
     for line in stdin().lock().lines() {
         let line = line.unwrap();
         let mut parts = line.split(" ");
         let port1 = parse_commit_port(parts.next().expect("expecting port 1"));
         let port2 = parse_commit_port(parts.next().expect("expecting port 2"));
         println!("{:x?} {:x?}", port1, port2);
+        bubble_count += 1;
         if let Some(port1) = port1 {
             executor.next(port1);
+            bubble_count = 0;
         }
         if let Some(port2) = port2 {
             executor.next(port2);
+            bubble_count = 0;
+        }
+        if bubble_count == 100 {
+            panic!("Too many continuous bubbles. Core stuck?");
         }
     }
 }

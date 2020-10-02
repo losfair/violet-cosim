@@ -1,10 +1,11 @@
 use std::io::Read;
 use std::fs::File;
-use rvsim::MemoryAccess;
+use rvsim::{MemoryAccess, Op};
 use crate::port::Port;
 
 struct SimMemory {
     ram: Vec<u8>,
+    mmio_mark: bool,
 }
 
 impl SimMemory {
@@ -13,27 +14,15 @@ impl SimMemory {
         let mut ram = vec![];
         f.read_to_end(&mut ram).unwrap();
         ram.resize(65536, 0);
-        Self { ram }
+        Self { ram, mmio_mark: false }
     }
 }
 
 impl rvsim::Memory for SimMemory {
     fn access<T: Copy>(&mut self, addr: u32, access: MemoryAccess<T>) -> bool {
         if addr >> 28 == 0xf {
-            // IO mem
-            match addr {
-                0xfe000000 => {
-                    match access {
-                        MemoryAccess::Store(value) => {
-                            let value = decode_value(value);
-                            println!("Cosim putchar: {}", value);
-                            true
-                        }
-                        _ => panic!("bad access to 0xfe000000")
-                    }
-                }
-                _ => panic!("invalid io address: 0x{:016x}", addr)
-            }
+            self.mmio_mark = true;
+            true
         } else {
             rvsim::Memory::access(&mut self.ram[..], addr, access)
         }
@@ -58,6 +47,8 @@ pub struct Executor {
     cpu: rvsim::CpuState,
 
     remote_rf: [u32; 32],
+
+    inst_count: u64,
 }
 
 impl Executor {
@@ -67,20 +58,60 @@ impl Executor {
             clock: rvsim::SimpleClock::new(),
             cpu: rvsim::CpuState::new(0),
             remote_rf: [0; 32],
+            inst_count: 0,
         }
     }
 
     pub fn next(&mut self, commit: Port) {
         if commit.pc != self.cpu.pc {
-            println!("pc mismatch: remote: 0x{:016x}, local: 0x{:016x} - rectifying local and continueing", commit.pc, self.cpu.pc);
-            self.cpu.pc = commit.pc;
+            panic!("pc mismatch: remote: 0x{:016x}, local: 0x{:016x}", commit.pc, self.cpu.pc);
         }
         let mut interp = rvsim::Interp::new(&mut self.cpu, &mut self.m, &mut self.clock);
-        interp.step().unwrap();
+        let op = match interp.step() {
+            Ok(x) => x,
+            Err((e, op)) => {
+                let mut fixed = false;
+                if let Some(ref op) = op {
+                    if Self::is_csr_op(&op) {
+                        fixed = true;
+                    }
+                }
+                if !fixed {
+                    panic!("Simulation error: {:?} {:?}", e, op);
+                }
+                op.unwrap()
+            }
+        };
         println!("interp pc: 0x{:016x}", self.cpu.pc);
         self.apply_commit(commit);
+        self.patch_mmio_mark(&op);
         if self.remote_rf != self.cpu.x {
-            panic!("regfile mismatch: remote: {:?}, local: {:?}", self.remote_rf, self.cpu.x);
+            println!("regfile mismatch: remote: {:?}, local: {:?}", self.remote_rf, self.cpu.x);
+            if !self.m.mmio_mark {
+                panic!("Regfile mismatch not accepted.")
+            } else {
+                eprintln!("Accepted regfile mismatch after MMIO/CSR operation.");
+                self.cpu.x = self.remote_rf;
+            }
+        }
+        self.m.mmio_mark = false;
+
+        self.inst_count += 1;
+        if self.inst_count % 1000000 == 0 {
+            eprintln!("Co-simulated {} instructions.", self.inst_count);
+        }
+    }
+
+    fn is_csr_op(op: &Op) -> bool {
+        match op {
+            Op::Csrrw { .. } | Op::Csrrs { .. } | Op::Csrrc { .. } | Op::Csrrwi { .. } | Op::Csrrsi { .. } | Op::Csrrci { .. } => true,
+            _ => false
+        }
+    }
+
+    fn patch_mmio_mark(&mut self, op: &Op) {
+        if Self::is_csr_op(op) {
+            self.m.mmio_mark = true;
         }
     }
 
