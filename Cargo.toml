@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 regex = "1.3"
-rvsim = "0.2"
+rvsim = { git = "https://github.com/losfair/rvsim", rev = "f4964aaac063cdcbf798a2f695914eae4ffef075" }

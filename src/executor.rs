@@ -13,7 +13,7 @@ impl SimMemory {
         let mut f = File::open(path).unwrap();
         let mut ram = vec![];
         f.read_to_end(&mut ram).unwrap();
-        ram.resize(65536, 0);
+        ram.resize(65536 * 4, 0);
         Self {
             ram,
             mmio_mark: false,
