@@ -1,13 +1,14 @@
-mod port;
 mod executor;
+mod port;
 
-use std::io::{BufRead, stdin};
 use port::Port;
 use regex::Regex;
+use std::io::{stdin, BufRead};
 use std::str::FromStr;
 
 fn main() {
-    let mut executor = executor::Executor::new(&std::env::args().nth(1).expect("missing path to firmware"));
+    let mut executor =
+        executor::Executor::new(&std::env::args().nth(1).expect("missing path to firmware"));
     let mut bubble_count: u64 = 0;
     for line in stdin().lock().lines() {
         let line = line.unwrap();

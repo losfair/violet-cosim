@@ -1,7 +1,7 @@
-use std::io::Read;
-use std::fs::File;
-use rvsim::{MemoryAccess, Op};
 use crate::port::Port;
+use rvsim::{MemoryAccess, Op};
+use std::fs::File;
+use std::io::Read;
 
 struct SimMemory {
     ram: Vec<u8>,
@@ -14,7 +14,10 @@ impl SimMemory {
         let mut ram = vec![];
         f.read_to_end(&mut ram).unwrap();
         ram.resize(65536, 0);
-        Self { ram, mmio_mark: false }
+        Self {
+            ram,
+            mmio_mark: false,
+        }
     }
 }
 
@@ -36,7 +39,7 @@ fn decode_value<T: Copy>(x: T) -> u32 {
             1 => transmute_copy::<T, u8>(&x) as u32,
             2 => transmute_copy::<T, u16>(&x) as u32,
             4 => transmute_copy::<T, u32>(&x),
-            _ => panic!("decode_value: bad size")
+            _ => panic!("decode_value: bad size"),
         }
     }
 }
@@ -64,7 +67,10 @@ impl Executor {
 
     pub fn next(&mut self, commit: Port) {
         if commit.pc != self.cpu.pc {
-            panic!("pc mismatch: remote: 0x{:016x}, local: 0x{:016x}", commit.pc, self.cpu.pc);
+            panic!(
+                "pc mismatch: remote: 0x{:016x}, local: 0x{:016x}",
+                commit.pc, self.cpu.pc
+            );
         }
         let mut interp = rvsim::Interp::new(&mut self.cpu, &mut self.m, &mut self.clock);
         let op = match interp.step() {
@@ -86,7 +92,10 @@ impl Executor {
         self.apply_commit(commit);
         self.patch_mmio_mark(&op);
         if self.remote_rf != self.cpu.x {
-            println!("regfile mismatch: remote: {:?}, local: {:?}", self.remote_rf, self.cpu.x);
+            println!(
+                "regfile mismatch: remote: {:?}, local: {:?}",
+                self.remote_rf, self.cpu.x
+            );
             if !self.m.mmio_mark {
                 panic!("Regfile mismatch not accepted.")
             } else {
@@ -104,8 +113,13 @@ impl Executor {
 
     fn is_csr_op(op: &Op) -> bool {
         match op {
-            Op::Csrrw { .. } | Op::Csrrs { .. } | Op::Csrrc { .. } | Op::Csrrwi { .. } | Op::Csrrsi { .. } | Op::Csrrci { .. } => true,
-            _ => false
+            Op::Csrrw { .. }
+            | Op::Csrrs { .. }
+            | Op::Csrrc { .. }
+            | Op::Csrrwi { .. }
+            | Op::Csrrsi { .. }
+            | Op::Csrrci { .. } => true,
+            _ => false,
         }
     }
 
