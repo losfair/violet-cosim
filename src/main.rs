@@ -7,7 +7,7 @@ use regex::Regex;
 use std::str::FromStr;
 
 fn main() {
-    let mut executor = executor::Executor::new("firmware.bin");
+    let mut executor = executor::Executor::new(&std::env::args().nth(1).expect("missing path to firmware"));
     let mut bubble_count: u64 = 0;
     for line in stdin().lock().lines() {
         let line = line.unwrap();
